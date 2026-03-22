@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Diabetes Prediction System</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { background: #f4f6fb; font-family: 'Segoe UI', sans-serif; }
+    .navbar { background: #1a237e; }
+    .navbar-brand { color: #fff !important; font-weight: 700; font-size: 1.3rem; }
+    .card { border: none; border-radius: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.07); }
+    .section-title { font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+                     letter-spacing: 0.08em; color: #888; margin-bottom: 12px; }
+    .risk-badge { font-size: 1rem; padding: 6px 18px; border-radius: 20px; font-weight: 600; }
+    .risk-Low    { background:#e8f5e9; color:#2e7d32; }
+    .risk-Moderate { background:#fff8e1; color:#f57f17; }
+    .risk-High   { background:#fbe9e7; color:#bf360c; }
+    .risk-Critical { background:#fce4ec; color:#880e4f; }
+    .prob-bar { height: 18px; border-radius: 9px; transition: width 0.8s ease; }
+    .shap-bar { height: 10px; border-radius: 5px; }
+    .alert-trend { background:#fff3e0; border-left:4px solid #ff9800;
+                   border-radius:8px; padding:10px 14px; margin-bottom:8px;
+                   font-size:0.9rem; color:#e65100; }
+    .stat-card { background:#fff; border-radius:12px; padding:16px 20px;
+                 box-shadow:0 1px 6px rgba(0,0,0,0.06); text-align:center; }
+    .stat-val  { font-size:1.8rem; font-weight:700; color:#1a237e; }
+    .stat-lbl  { font-size:0.78rem; color:#999; text-transform:uppercase; }
+    .tab-btn   { border:none; background:none; padding:8px 20px; border-radius:8px;
+                 font-weight:500; color:#666; cursor:pointer; transition:all 0.2s; }
+    .tab-btn.active { background:#1a237e; color:#fff; }
+    .form-label { font-size:0.85rem; font-weight:500; color:#444; }
+    .form-control, .form-select { border-radius:8px; font-size:0.9rem; }
+    .btn-predict { background:#1a237e; color:#fff; border:none; border-radius:10px;
+                   padding:12px 36px; font-size:1rem; font-weight:600;
+                   transition:background 0.2s; cursor:pointer; }
+    .btn-predict:hover { background:#283593; color:#fff; }
+    .visit-row { border-left:3px solid #1a237e; padding:8px 14px;
+                 margin-bottom:8px; background:#f8f9ff; border-radius:0 8px 8px 0; }
+    #resultSection { display:none; }
+    #historySection { display:none; }
+    #dashSection { display:none; }
+    html { scroll-behavior: smooth; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar px-4 py-3 mb-4">
+  <span class="navbar-brand">DiabetesAI — Prediction System</span>
+  <div class="d-flex gap-2">
+    <button type="button" class="tab-btn active" onclick="showTab('predict')">Predict</button>
+    <button type="button" class="tab-btn" onclick="showTab('history')">Patient History</button>
+    <button type="button" class="tab-btn" onclick="showTab('dashboard')">Dashboard</button>
+  </div>
+</nav>
+
+<div class="container pb-5">
+
+<div id="predictTab">
+
+  <div class="card p-4 mb-4">
+    <p class="section-title">Step 1 — Patient Identification</p>
+    <div class="row g-3 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label">Patient ID</label>
+        <input type="number" id="patientIdInput" class="form-control" placeholder="e.g. 6000"/>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Visit Date</label>
+        <input type="date" id="visitDate" class="form-control"/>
+      </div>
+      <div class="col-md-3">
+        <button type="button" class="btn btn-outline-primary w-100" onclick="checkPatient()">Check Patient</button>
+      </div>
+    </div>
+    <div class="mt-3 p-3" style="background:#f8f9ff; border-radius:10px; border:1px dashed #c5cae9;">
+      <p class="section-title mb-2">Or upload a CSV file to auto-fill</p>
+      <div class="d-flex align-items-center gap-3">
+        <input type="file" id="csvUpload" accept=".csv" class="form-control" style="max-width:300px;" onchange="loadCSV(this)"/>
+        <span style="font-size:0.82rem; color:#999;">CSV must have column headers matching field names</span>
+      </div>
+      <div id="csvStatus" class="mt-2"></div>
+    </div>
+    <div id="patientStatus" class="mt-3"></div>
+  </div>
+
+  <div id="formSection" style="display:none;">
+    <div class="card p-4 mb-4">
+      <p class="section-title">Step 2 — Patient Demographics</p>
+      <div class="row g-3">
+        <div class="col-md-3"><label class="form-label">Age</label>
+          <input type="number" id="Age" class="form-control" placeholder="e.g. 45"/></div>
+        <div class="col-md-3"><label class="form-label">Gender</label>
+          <select id="Gender" class="form-select">
+            <option value="0">Female</option><option value="1">Male</option>
+          </select></div>
+        <div class="col-md-3"><label class="form-label">BMI</label>
+          <input type="number" step="0.1" id="BMI" class="form-control" placeholder="e.g. 27.5"/></div>
+        <div class="col-md-3"><label class="form-label">Smoking</label>
+          <select id="Smoking" class="form-select">
+            <option value="0">No</option><option value="1">Yes</option>
+          </select></div>
+        <div class="col-md-3"><label class="form-label">Family History Diabetes</label>
+          <select id="FamilyHistoryDiabetes" class="form-select">
+            <option value="0">No</option><option value="1">Yes</option>
+          </select></div>
+        <div class="col-md-3"><label class="form-label">Hypertension</label>
+          <select id="Hypertension" class="form-select">
+            <option value="0">No</option><option value="1">Yes</option>
+          </select></div>
+        <div class="col-md-3"><label class="form-label">Socioeconomic Status</label>
+          <select id="SocioeconomicStatus" class="form-select">
+            <option value="0">Low</option><option value="1">Medium</option><option value="2">High</option>
+          </select></div>
+        <div class="col-md-3"><label class="form-label">Education Level</label>
+          <select id="EducationLevel" class="form-select">
+            <option value="0">None</option><option value="1">Primary</option>
+            <option value="2">Secondary</option><option value="3">Higher</option>
+          </select></div>
+      </div>
+    </div>
+
+    <div class="card p-4 mb-4">
+      <p class="section-title">Step 3 — Clinical Measurements</p>
+      <div class="row g-3">
+        <div class="col-md-3"><label class="form-label">Fasting Blood Sugar (mg/dL)</label>
+          <input type="number" step="0.1" id="FastingBloodSugar" class="form-control" placeholder="e.g. 130"/></div>
+        <div class="col-md-3"><label class="form-label">HbA1c (%)</label>
+          <input type="number" step="0.1" id="HbA1c" class="form-control" placeholder="e.g. 7.2"/></div>
+        <div class="col-md-3"><label class="form-label">Post Prandial Glucose</label>
+          <input type="number" step="0.1" id="PostPrandialGlucose" class="form-control" placeholder="e.g. 180"/></div>
+        <div class="col-md-3"><label class="form-label">Insulin (µU/mL)</label>
+          <input type="number" step="0.1" id="Insulin" class="form-control" placeholder="e.g. 15"/></div>
+        <div class="col-md-3"><label class="form-label">Systolic BP</label>
+          <input type="number" id="SystolicBP" class="form-control" placeholder="e.g. 130"/></div>
+        <div class="col-md-3"><label class="form-label">Diastolic BP</label>
+          <input type="number" id="DiastolicBP" class="form-control" placeholder="e.g. 85"/></div>
+        <div class="col-md-3"><label class="form-label">Cholesterol Total</label>
+          <input type="number" step="0.1" id="CholesterolTotal" class="form-control" placeholder="e.g. 200"/></div>
+        <div class="col-md-3"><label class="form-label">Cholesterol LDL</label>
+          <input type="number" step="0.1" id="CholesterolLDL" class="form-control" placeholder="e.g. 120"/></div>
+        <div class="col-md-3"><label class="form-label">Cholesterol HDL</label>
+          <input type="number" step="0.1" id="CholesterolHDL" class="form-control" placeholder="e.g. 50"/></div>
+        <div class="col-md-3"><label class="form-label">Triglycerides</label>
+          <input type="number" step="0.1" id="CholesterolTriglycerides" class="form-control" placeholder="e.g. 150"/></div>
+        <div class="col-md-3"><label class="form-label">Serum Creatinine</label>
+          <input type="number" step="0.01" id="SerumCreatinine" class="form-control" placeholder="e.g. 1.0"/></div>
+        <div class="col-md-3"><label class="form-label">BUN Levels</label>
+          <input type="number" step="0.1" id="BUNLevels" class="form-control" placeholder="e.g. 15"/></div>
+        <div class="col-md-3"><label class="form-label">Waist Circumference (cm)</label>
+          <input type="number" step="0.1" id="WaistCircumference" class="form-control" placeholder="e.g. 90"/></div>
+      </div>
+    </div>
+
+    <div class="card p-4 mb-4">
+      <p class="section-title">Step 4 — Lifestyle & Symptoms</p>
+      <div class="row g-3">
+        <div class="col-md-3"><label class="form-label">Physical Activity (0-10)</label>
+          <input type="number" step="0.1" id="PhysicalActivity" class="form-control" placeholder="e.g. 5"/></div>
+        <div class="col-md-3"><label class="form-label">Sleep Quality (0-10)</label>
+          <input type="number" step="0.1" id="SleepQuality" class="form-control" placeholder="e.g. 6"/></div>
+        <div class="col-md-3"><label class="form-label">Diet Quality (0-10)</label>
+          <input type="number" step="0.1" id="DietQuality" class="form-control" placeholder="e.g. 5"/></div>
+        <div class="col-md-3"><label class="form-label">Stress Level (0-10)</label>
+          <input type="number" step="0.1" id="StressLevel" class="form-control" placeholder="e.g. 4"/></div>
+        <div class="col-md-3"><label class="form-label">Alcohol Consumption</label>
+          <input type="number" step="0.1" id="AlcoholConsumption" class="form-control" placeholder="e.g. 2"/></div>
+        <div class="col-md-3"><label class="form-label">Medication Adherence (0-10)</label>
+          <input type="number" step="0.1" id="MedicationAdherence" class="form-control" placeholder="e.g. 7"/></div>
+        <div class="col-md-3"><label class="form-label">Carbohydrate Intake (g)</label>
+          <input type="number" step="0.1" id="CarbohydrateIntake" class="form-control" placeholder="e.g. 250"/></div>
+        <div class="col-md-3"><label class="form-label">Calorie Intake (kcal)</label>
+          <input type="number" id="CalorieIntake" class="form-control" placeholder="e.g. 2000"/></div>
+        <div class="col-md-3"><label class="form-label">Fatigue Levels (0-10)</label>
+          <input type="number" step="0.1" id="FatigueLevels" class="form-control" placeholder="e.g. 4"/></div>
+        <div class="col-md-3"><label class="form-label">Quality of Life Score</label>
+          <input type="number" step="0.1" id="QualityOfLifeScore" class="form-control" placeholder="e.g. 70"/></div>
+        <div class="col-md-3"><label class="form-label">Medical Checkups / Year</label>
+          <input type="number" step="0.1" id="MedicalCheckupsFrequency" class="form-control" placeholder="e.g. 2"/></div>
+      </div>
+      <div class="row g-3 mt-1">
+        <p class="section-title mb-0">Symptoms</p>
+        <div class="col-md-2"><label class="form-label">Frequent Urination</label>
+          <select id="FrequentUrination" class="form-select"><option value="0">No</option><option value="1">Yes</option></select></div>
+        <div class="col-md-2"><label class="form-label">Excessive Thirst</label>
+          <select id="ExcessiveThirst" class="form-select"><option value="0">No</option><option value="1">Yes</option></select></div>
+        <div class="col-md-2"><label class="form-label">Weight Loss</label>
+          <select id="UnexplainedWeightLoss" class="form-select"><option value="0">No</option><option value="1">Yes</option></select></div>
+        <div class="col-md-2"><label class="form-label">Blurred Vision</label>
+          <select id="BlurredVision" class="form-select"><option value="0">No</option><option value="1">Yes</option></select></div>
+        <div class="col-md-2"><label class="form-label">Slow Healing Sores</label>
+          <select id="SlowHealingSores" class="form-select"><option value="0">No</option><option value="1">Yes</option></select></div>
+        <div class="col-md-2"><label class="form-label">Tingling Hands/Feet</label>
+          <select id="TinglingHandsFeet" class="form-select"><option value="0">No</option><option value="1">Yes</option></select></div>
+      </div>
+      <div class="row g-3 mt-1">
+        <div class="col-md-4"><label class="form-label">Antidiabetic Medications</label>
+          <select id="AntidiabeticMedications" class="form-select"><option value="0">No</option><option value="1">Yes</option></select></div>
+        <div class="col-md-4"><label class="form-label">Antihypertensive Medications</label>
+          <select id="AntihypertensiveMedications" class="form-select"><option value="0">No</option><option value="1">Yes</option></select></div>
+        <div class="col-md-4"><label class="form-label">Statins</label>
+          <select id="Statins" class="form-select"><option value="0">No</option><option value="1">Yes</option></select></div>
+      </div>
+      <div class="mt-3">
+        <label class="form-label">Doctor Notes</label>
+        <textarea id="DoctorNotes" class="form-control" rows="2" placeholder="Optional clinical observations..."></textarea>
+      </div>
+    </div>
+
+    <div class="text-center mb-4 d-flex gap-3 justify-content-center">
+      <button type="button" class="btn btn-outline-secondary" onclick="fillSample()">Load Sample (High Risk)</button>
+      <button type="button" class="btn-predict" onclick="predict()">Run Prediction</button>
+    </div>
+  </div>
+
+  <div id="resultSection">
+    <div class="row g-4 mb-4">
+      <div class="col-md-4">
+        <div class="card p-4 h-100">
+          <p class="section-title">Diagnosis</p>
+          <h2 id="diagnosisResult" class="fw-bold mb-1"></h2>
+          <span id="riskBadge" class="risk-badge"></span>
+          <p class="mt-3 mb-1 text-muted" style="font-size:0.85rem;">Probability of Diabetes</p>
+          <div class="d-flex align-items-center gap-2">
+            <div class="flex-grow-1 bg-light rounded" style="height:18px;">
+              <div id="probBar" class="prob-bar" style="width:0%"></div>
+            </div>
+            <span id="probText" class="fw-bold" style="min-width:48px;"></span>
+          </div>
+          <p id="revisitBadge" class="mt-3 mb-0" style="font-size:0.82rem;"></p>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card p-4 h-100">
+          <p class="section-title">Top Risk Factors (SHAP)</p>
+          <div id="shapList"></div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card p-4 h-100">
+          <p class="section-title">Recommendations</p>
+          <ul id="recList" class="ps-3" style="font-size:0.9rem;"></ul>
+          <hr/>
+          <p class="section-title">Population Comparison</p>
+          <div id="popComp" style="font-size:0.85rem;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="trendAlerts"></div>
+
+    <div id="confirmCard" class="card p-4 mb-4" style="display:none;">
+      <p class="section-title">Step 5 — Doctor Verification</p>
+      <p style="font-size:0.9rem; color:#555;">Was the model's prediction correct? Your feedback helps improve the model over time.</p>
+      <div class="d-flex gap-3 align-items-center flex-wrap" id="confirmButtons">
+        <button type="button" class="btn btn-success" onclick="confirmDiagnosis(true)">
+          ✓ Prediction is Correct
+        </button>
+        <button type="button" class="btn btn-danger" onclick="showCorrectionBox()">
+          ✗ Prediction is Wrong
+        </button>
+      </div>
+      <div id="correctionBox" style="display:none; margin-top:14px;">
+        <p style="font-size:0.88rem; color:#555; margin-bottom:8px;">What is the actual diagnosis?</p>
+        <div class="d-flex gap-3 align-items-center">
+          <select id="actualDiagnosis" class="form-select" style="max-width:200px;">
+            <option value="0">Non-Diabetic</option>
+            <option value="1">Diabetic</option>
+          </select>
+          <button type="button" class="btn btn-primary" onclick="confirmDiagnosis(false)">
+            Submit Correction
+          </button>
+        </div>
+      </div>
+      <div id="confirmStatus" class="mt-3"></div>
+    </div>
+
+    <div id="trajectoryCard" class="card p-4 mb-4" style="display:none;">
+      <p class="section-title">Risk Trajectory Over Visits</p>
+      <canvas id="trajectoryChart" height="100"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<div id="historyTab" style="display:none;">
+  <div class="card p-4 mb-4">
+    <p class="section-title">Look Up Patient History</p>
+    <div class="row g-3 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label">Patient ID</label>
+        <input type="number" id="histPatientId" class="form-control" placeholder="e.g. 6000"/>
+      </div>
+      <div class="col-md-3">
+        <button type="button" class="btn btn-outline-primary w-100" onclick="loadHistory()">Load History</button>
+      </div>
+    </div>
+  </div>
+  <div id="historySection">
+    <div class="row g-3 mb-4" id="histStats"></div>
+    <div class="card p-4 mb-4">
+      <p class="section-title">Risk Probability Over Time</p>
+      <canvas id="histChart" height="100"></canvas>
+    </div>
+    <div class="card p-4">
+      <p class="section-title">Visit Log</p>
+      <div id="visitLog"></div>
+    </div>
+  </div>
+</div>
+
+<div id="dashTab" style="display:none;">
+  <div id="dashSection">
+    <div class="row g-3 mb-4" id="dashStats"></div>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <div class="card p-4">
+          <p class="section-title">Risk Distribution</p>
+          <canvas id="riskChart" height="200"></canvas>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card p-4">
+          <p class="section-title">Average Clinical Values</p>
+          <div id="avgStats" style="font-size:0.95rem;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="dashEmpty" class="text-center text-muted py-5">
+    <p>No patient data yet. Run some predictions first.</p>
+  </div>
+</div>
+
+</div>
+
+<script>
+const API = "http://127.0.0.1:5000";
+let currentPatientId = null;
+let currentVisitDate = null;
+let trajectoryChartObj = null;
+let histChartObj = null;
+let riskChartObj = null;
+
+function showTab(tab) {
+  ["predict","history","dash"].forEach(t => {
+    document.getElementById(t+"Tab").style.display = t===tab ? "block" : "none";
+  });
+  document.querySelectorAll(".tab-btn").forEach((b,i) => {
+    b.classList.toggle("active", ["predict","history","dashboard"][i]===tab);
+  });
+  if (tab === "dashboard") loadDashboard();
+}
+
+document.getElementById("visitDate").value = new Date().toISOString().split("T")[0];
+
+async function checkPatient() {
+  const id = document.getElementById("patientIdInput").value;
+  if (!id) { alert("Please enter a Patient ID"); return; }
+  currentPatientId = id;
+  document.getElementById("resultSection").style.display = "none";
+  document.getElementById("trajectoryCard").style.display = "none";
+  document.getElementById("confirmCard").style.display = "none";
+  document.getElementById("trendAlerts").innerHTML = "";
+  const res  = await fetch(`${API}/patient/check/${id}`);
+  const data = await res.json();
+  const statusDiv = document.getElementById("patientStatus");
+  if (data.exists) {
+    statusDiv.innerHTML = `<div class="alert alert-info mb-0">
+      <strong>Returning patient</strong> — ${data.visit_count} previous visit(s) found.
+      Lag features will be computed from visit history.
+    </div>`;
+  } else {
+    statusDiv.innerHTML = `<div class="alert alert-success mb-0">
+      <strong>New patient</strong> — No previous visits found. Please fill in all fields below.
+    </div>`;
+  }
+  document.getElementById("formSection").style.display = "block";
+}
+
+function collectFormData() {
+  const fields = [
+    "Age","Gender","BMI","Smoking","FamilyHistoryDiabetes","Hypertension",
+    "SocioeconomicStatus","EducationLevel","FastingBloodSugar","HbA1c",
+    "PostPrandialGlucose","Insulin","SystolicBP","DiastolicBP",
+    "CholesterolTotal","CholesterolLDL","CholesterolHDL","CholesterolTriglycerides",
+    "SerumCreatinine","BUNLevels","WaistCircumference","CarbohydrateIntake",
+    "CalorieIntake","PhysicalActivity","SleepQuality","DietQuality","StressLevel",
+    "AlcoholConsumption","MedicationAdherence","FatigueLevels","QualityOfLifeScore",
+    "MedicalCheckupsFrequency","FrequentUrination","ExcessiveThirst",
+    "UnexplainedWeightLoss","BlurredVision","SlowHealingSores","TinglingHandsFeet",
+    "AntidiabeticMedications","AntihypertensiveMedications","Statins","DoctorNotes",
+    "Ethnicity","PreviousPreDiabetes","GestationalDiabetes",
+    "HeavyMetalsExposure","OccupationalExposureChemicals","WaterQuality","HealthLiteracy"
+  ];
+  const data = { PatientID: currentPatientId,
+                 visit_date: document.getElementById("visitDate").value };
+  fields.forEach(f => {
+    const el = document.getElementById(f);
+    if (el) data[f] = el.value || 0;
+  });
+  return data;
+}
+
+async function predict() {
+  const data = collectFormData();
+  currentVisitDate = data.visit_date;
+  const btn  = document.querySelector(".btn-predict");
+  btn.textContent = "Running...";
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${API}/predict`, {
+      method : "POST",
+      headers: {"Content-Type": "application/json"},
+      body   : JSON.stringify(data)
+    });
+    const result = await res.json();
+    renderResult(result);
+  } catch(e) {
+    alert("Error connecting to backend. Make sure app.py is running.");
+  }
+  btn.textContent = "Run Prediction";
+  btn.disabled = false;
+}
+
+function renderResult(r) {
+  const resultEl = document.getElementById("resultSection");
+  resultEl.style.display = "block";
+  setTimeout(() => {
+    window.scrollTo({ top: resultEl.offsetTop - 10, behavior: "smooth" });
+  }, 200);
+
+  const p = r.prediction;
+  document.getElementById("diagnosisResult").textContent = p.diagnosis;
+  document.getElementById("diagnosisResult").style.color = p.diagnosis === "Diabetic" ? "#c62828" : "#2e7d32";
+
+  const riskKey = p.risk_category.split(" ")[0];
+  const badge = document.getElementById("riskBadge");
+  badge.textContent = p.risk_category;
+  badge.className = `risk-badge risk-${riskKey}`;
+
+  document.getElementById("probBar").style.width = p.probability + "%";
+  document.getElementById("probText").textContent = p.probability.toFixed(1) + "%";
+  document.getElementById("probBar").style.background =
+    p.probability > 75 ? "#c62828" : p.probability > 50 ? "#ef6c00" : "#2e7d32";
+
+  document.getElementById("revisitBadge").innerHTML = r.is_revisit
+    ? `<span class="badge bg-info text-dark">Revisit — lag features computed</span>`
+    : `<span class="badge bg-secondary">New patient</span>`;
+
+  const shapList = document.getElementById("shapList");
+  shapList.innerHTML = "";
+  r.shap_explanation.slice(0,6).forEach(s => {
+    const pct   = Math.min(100, Math.abs(s.shap) * 300);
+    const color = s.shap > 0 ? "#c62828" : "#2e7d32";
+    const dir   = s.shap > 0 ? "↑ risk" : "↓ risk";
+    shapList.innerHTML += `
+      <div class="mb-2">
+        <div class="d-flex justify-content-between" style="font-size:0.8rem;">
+          <span>${s.feature.replace(/_/g," ")}</span>
+          <span style="color:${color};font-weight:600;">${dir}</span>
+        </div>
+        <div class="bg-light rounded" style="height:8px;">
+          <div class="shap-bar" style="width:${pct}%;background:${color};"></div>
+        </div>
+      </div>`;
+  });
+
+  const recList = document.getElementById("recList");
+  recList.innerHTML = r.recommendations.map(rec => `<li>${rec}</li>`).join("");
+
+  const popDiv = document.getElementById("popComp");
+  popDiv.innerHTML = "";
+  Object.entries(r.population_comparison).forEach(([k, v]) => {
+    const arrow = v.direction === "above" ? "▲" : "▼";
+    const col   = v.direction === "above" ? "#c62828" : "#2e7d32";
+    popDiv.innerHTML += `<div class="d-flex justify-content-between mb-1">
+      <span>${k.replace(/_/g," ")}</span>
+      <span style="color:${col};font-weight:600;">${arrow} ${v.value} (avg: ${v.mean})</span>
+    </div>`;
+  });
+
+  const alertDiv = document.getElementById("trendAlerts");
+  alertDiv.innerHTML = "";
+  if (r.trend_alerts && r.trend_alerts.length > 0) {
+    r.trend_alerts.forEach(a => {
+      alertDiv.innerHTML += `<div class="alert-trend">⚠ ${a}</div>`;
+    });
+  }
+
+  // Show confirm card
+  const confirmCard = document.getElementById("confirmCard");
+  confirmCard.style.display = "block";
+  document.getElementById("confirmStatus").innerHTML = "";
+  document.getElementById("confirmButtons").style.display = "flex";
+  document.getElementById("correctionBox").style.display = "none";
+
+  if (r.is_revisit) {
+    loadTrajectoryChart(r.patient_id);
+  }
+}
+
+function showCorrectionBox() {
+  document.getElementById("correctionBox").style.display = "block";
+}
+
+async function confirmDiagnosis(wasCorrect) {
+  const actualDiagnosis = wasCorrect
+    ? (document.getElementById("diagnosisResult").textContent === "Diabetic" ? 1 : 0)
+    : parseInt(document.getElementById("actualDiagnosis").value);
+
+  try {
+    const res  = await fetch(`${API}/confirm`, {
+      method : "POST",
+      headers: {"Content-Type": "application/json"},
+      body   : JSON.stringify({
+        patient_id       : currentPatientId,
+        visit_date       : currentVisitDate,
+        actual_diagnosis : actualDiagnosis,
+        was_correct      : wasCorrect
+      })
+    });
+    const data = await res.json();
+
+    document.getElementById("confirmButtons").style.display = "none";
+    document.getElementById("correctionBox").style.display = "none";
+
+    const statusDiv = document.getElementById("confirmStatus");
+    if (data.should_retrain) {
+      statusDiv.innerHTML = `
+        <div class="alert alert-warning mb-0">
+          <strong>🎯 ${data.retrain_message}</strong><br>
+          <span style="font-size:0.85rem;">Run <code>python model/retrain_model.py</code> to update the model.</span>
+        </div>`;
+    } else {
+      statusDiv.innerHTML = `
+        <div class="alert alert-success mb-0">
+          ✓ Thank you! ${data.retrain_message}
+        </div>`;
+    }
+  } catch(e) {
+    alert("Error saving confirmation. Make sure backend is running.");
+  }
+}
+
+async function loadTrajectoryChart(patientId) {
+  const res  = await fetch(`${API}/patient/${patientId}/history`);
+  const data = await res.json();
+  if (!data.history || data.history.length < 2) return;
+  document.getElementById("trajectoryCard").style.display = "block";
+  const labels = data.history.map(v => v.visit_date);
+  const probs  = data.history.map(v => (v.PredictedProbability * 100).toFixed(1));
+  if (trajectoryChartObj) trajectoryChartObj.destroy();
+  trajectoryChartObj = new Chart(document.getElementById("trajectoryChart"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: "Diabetes Probability (%)",
+        data : probs,
+        borderColor: "#1a237e",
+        backgroundColor: "rgba(26,35,126,0.08)",
+        tension: 0.4, fill: true, pointRadius: 5
+      }]
+    },
+    options: { plugins: { legend: { display: false } },
+               scales: { y: { min:0, max:100 } } }
+  });
+}
+
+async function loadHistory() {
+  const id  = document.getElementById("histPatientId").value;
+  if (!id) { alert("Enter a Patient ID"); return; }
+  const res  = await fetch(`${API}/patient/${id}/history`);
+  if (!res.ok) { alert("Patient not found"); return; }
+  const data = await res.json();
+  document.getElementById("historySection").style.display = "block";
+  const lastVisit = data.history[data.history.length - 1];
+  document.getElementById("histStats").innerHTML = `
+    <div class="col-md-3"><div class="stat-card">
+      <div class="stat-val">${data.total_visits}</div>
+      <div class="stat-lbl">Total Visits</div>
+    </div></div>
+    <div class="col-md-3"><div class="stat-card">
+      <div class="stat-val">${lastVisit ? (lastVisit.PredictedProbability*100).toFixed(1)+"%" : "—"}</div>
+      <div class="stat-lbl">Latest Risk</div>
+    </div></div>
+    <div class="col-md-3"><div class="stat-card">
+      <div class="stat-val">${lastVisit ? lastVisit.HbA1c || "—" : "—"}</div>
+      <div class="stat-lbl">Latest HbA1c</div>
+    </div></div>
+    <div class="col-md-3"><div class="stat-card">
+      <div class="stat-val">${lastVisit ? lastVisit.RiskCategory || "—" : "—"}</div>
+      <div class="stat-lbl">Risk Category</div>
+    </div></div>`;
+  const labels = data.history.map(v => v.visit_date);
+  const probs  = data.history.map(v => (v.PredictedProbability * 100).toFixed(1));
+  if (histChartObj) histChartObj.destroy();
+  histChartObj = new Chart(document.getElementById("histChart"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: "Risk Probability (%)",
+        data : probs,
+        borderColor: "#1a237e",
+        backgroundColor: "rgba(26,35,126,0.08)",
+        tension: 0.4, fill: true, pointRadius: 5
+      }]
+    },
+    options: { plugins: { legend: { display: false } },
+               scales: { y: { min:0, max:100 } } }
+  });
+  const log = document.getElementById("visitLog");
+  log.innerHTML = data.history.slice().reverse().map(v => `
+    <div class="visit-row">
+      <div class="d-flex justify-content-between">
+        <strong>${v.visit_date}</strong>
+        <span class="risk-badge risk-${(v.RiskCategory||"Low").split(" ")[0]}">${v.RiskCategory||"—"}</span>
+      </div>
+      <div style="font-size:0.85rem;color:#555;" class="mt-1">
+        HbA1c: ${v.HbA1c||"—"} &nbsp;|&nbsp;
+        FBS: ${v.FastingBloodSugar||"—"} &nbsp;|&nbsp;
+        BMI: ${v.BMI||"—"} &nbsp;|&nbsp;
+        Risk: ${v.PredictedProbability ? (v.PredictedProbability*100).toFixed(1)+"%" : "—"}
+        ${v.DoctorNotes ? `<br><em>${v.DoctorNotes}</em>` : ""}
+      </div>
+    </div>`).join("");
+}
+
+async function loadDashboard() {
+  const res  = await fetch(`${API}/dashboard`);
+  const data = await res.json();
+  if (data.total_patients === 0) {
+    document.getElementById("dashEmpty").style.display = "block";
+    document.getElementById("dashSection").style.display = "none";
+    return;
+  }
+  document.getElementById("dashEmpty").style.display = "none";
+  document.getElementById("dashSection").style.display = "block";
+  document.getElementById("dashStats").innerHTML = `
+    <div class="col-md-3"><div class="stat-card">
+      <div class="stat-val">${data.total_patients}</div>
+      <div class="stat-lbl">Total Patients</div>
+    </div></div>
+    <div class="col-md-3"><div class="stat-card">
+      <div class="stat-val" style="color:#c62828;">${data.diabetic_count}</div>
+      <div class="stat-lbl">Predicted Diabetic</div>
+    </div></div>
+    <div class="col-md-3"><div class="stat-card">
+      <div class="stat-val" style="color:#2e7d32;">${data.total_patients - data.diabetic_count}</div>
+      <div class="stat-lbl">Non-Diabetic</div>
+    </div></div>
+    <div class="col-md-3"><div class="stat-card">
+      <div class="stat-val">${data.total_patients > 0 ? ((data.diabetic_count/data.total_patients)*100).toFixed(1)+"%" : "—"}</div>
+      <div class="stat-lbl">Diabetic Rate</div>
+    </div></div>`;
+  const rd     = data.risk_distribution || {};
+  const labels = Object.keys(rd);
+  const vals   = Object.values(rd);
+  const colors = labels.map(l =>
+    l.includes("Critical") ? "#880e4f" : l.includes("High") ? "#bf360c" :
+    l.includes("Moderate") ? "#f57f17" : "#2e7d32");
+  if (riskChartObj) riskChartObj.destroy();
+  riskChartObj = new Chart(document.getElementById("riskChart"), {
+    type: "doughnut",
+    data: { labels, datasets: [{ data: vals, backgroundColor: colors }] },
+    options: { plugins: { legend: { position: "bottom" } } }
+  });
+  const a = data.averages;
+  document.getElementById("avgStats").innerHTML = `
+    <div class="d-flex justify-content-between py-2 border-bottom">
+      <span>Average HbA1c</span><strong>${a.avg_hba1c}%</strong></div>
+    <div class="d-flex justify-content-between py-2 border-bottom">
+      <span>Average Fasting Blood Sugar</span><strong>${a.avg_fbs} mg/dL</strong></div>
+    <div class="d-flex justify-content-between py-2">
+      <span>Average BMI</span><strong>${a.avg_bmi}</strong></div>`;
+}
+
+function fillSample() {
+  const vals = {
+    Age:"58", BMI:"34.5", FastingBloodSugar:"172", HbA1c:"8.9",
+    PostPrandialGlucose:"245", Insulin:"18", SystolicBP:"158",
+    DiastolicBP:"98", CholesterolTotal:"265", CholesterolLDL:"155",
+    CholesterolHDL:"38", CholesterolTriglycerides:"310",
+    SerumCreatinine:"1.3", BUNLevels:"22", WaistCircumference:"108",
+    PhysicalActivity:"2", SleepQuality:"4", DietQuality:"3",
+    StressLevel:"8", AlcoholConsumption:"6", MedicationAdherence:"3",
+    CarbohydrateIntake:"320", CalorieIntake:"2800",
+    FatigueLevels:"8", QualityOfLifeScore:"35", MedicalCheckupsFrequency:"1"
+  };
+  const sels = {
+    Gender:"1", Smoking:"1", FamilyHistoryDiabetes:"1", Hypertension:"1",
+    SocioeconomicStatus:"1", EducationLevel:"1",
+    FrequentUrination:"1", ExcessiveThirst:"1", UnexplainedWeightLoss:"1",
+    BlurredVision:"1", SlowHealingSores:"1", TinglingHandsFeet:"1",
+    AntidiabeticMedications:"0", AntihypertensiveMedications:"0", Statins:"0"
+  };
+  Object.entries(vals).forEach(([k,v]) => {
+    const el = document.getElementById(k); if (el) el.value = v;
+  });
+  Object.entries(sels).forEach(([k,v]) => {
+    const el = document.getElementById(k); if (el) el.value = v;
+  });
+}
+
+function loadCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const lines = e.target.result.trim().split("\n");
+    if (lines.length < 2) {
+      document.getElementById("csvStatus").innerHTML =
+        `<span style="color:red;font-size:0.85rem;">CSV must have a header row and at least one data row.</span>`;
+      return;
+    }
+    const headers = lines[0].split(",").map(h => h.trim());
+    const values  = lines[1].split(",").map(v => v.trim());
+    const row = {};
+    headers.forEach((h, i) => row[h] = values[i]);
+
+    if (row.PatientID) {
+      document.getElementById("patientIdInput").value = row.PatientID;
+      currentPatientId = row.PatientID;
+    }
+
+    const allFields = [
+      "Age","Gender","BMI","Smoking","FamilyHistoryDiabetes","Hypertension",
+      "SocioeconomicStatus","EducationLevel","FastingBloodSugar","HbA1c",
+      "PostPrandialGlucose","Insulin","SystolicBP","DiastolicBP",
+      "CholesterolTotal","CholesterolLDL","CholesterolHDL","CholesterolTriglycerides",
+      "SerumCreatinine","BUNLevels","WaistCircumference","CarbohydrateIntake",
+      "CalorieIntake","PhysicalActivity","SleepQuality","DietQuality","StressLevel",
+      "AlcoholConsumption","MedicationAdherence","FatigueLevels","QualityOfLifeScore",
+      "MedicalCheckupsFrequency","FrequentUrination","ExcessiveThirst",
+      "UnexplainedWeightLoss","BlurredVision","SlowHealingSores","TinglingHandsFeet",
+      "AntidiabeticMedications","AntihypertensiveMedications","Statins"
+    ];
+
+    let filled = 0;
+    allFields.forEach(f => {
+      const el = document.getElementById(f);
+      if (el && row[f] !== undefined) { el.value = row[f]; filled++; }
+    });
+
+    fetch(`${API}/patient/check/${currentPatientId}`)
+      .then(r => r.json())
+      .then(data => {
+        const statusDiv = document.getElementById("patientStatus");
+        if (data.exists) {
+          statusDiv.innerHTML = `<div class="alert alert-info mb-0">
+            <strong>Returning patient</strong> — ${data.visit_count} previous visit(s) found.
+            Lag features will be computed from visit history.
+          </div>`;
+        } else {
+          statusDiv.innerHTML = `<div class="alert alert-success mb-0">
+            <strong>New patient</strong> — No previous visits found.
+          </div>`;
+        }
+      });
+
+    document.getElementById("formSection").style.display = "block";
+    document.getElementById("csvStatus").innerHTML =
+      `<span style="color:green; font-size:0.85rem;">✓ Loaded ${filled} fields from CSV. Review below and click Run Prediction.</span>`;
+  };
+  reader.readAsText(file);
+}
+</script>
+</body>
+</html>
